@@ -125,6 +125,12 @@ impl From<String> for LocalisedString {
     }
 }
 
+impl From<&String> for LocalisedString {
+    fn from(value: &String) -> Self {
+        LocalisedString::Literal(value.clone())
+    }
+}
+
 impl From<Vec<String>> for LocalisedString {
     fn from(value: Vec<String>) -> Self {
         assert!(!value.is_empty(), "Function cannot be empty");
