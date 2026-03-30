@@ -17,7 +17,7 @@
 //!例：
 //!
 //!```rust
-//!println("{}", fust_i18n::t!("item-name.iron-plate"));
+//!println!("{}", fust_i18n::t!("item-name.iron-plate"));
 //!```
 //!
 
@@ -143,6 +143,14 @@ impl From<Vec<LocalisedString>> for LocalisedString {
         assert!(!value.is_empty(), "Function cannot be empty");
         LocalisedString::Function(value)
     }
+}
+
+#[cfg(feature = "egui")]
+impl From<LocalisedString> for egui::WidgetText {
+    fn from(value: LocalisedString) -> Self {
+        egui::WidgetText::from(value.to_string())
+    }
+    
 }
 
 /// 方便使用宏创建 LocalisedString
