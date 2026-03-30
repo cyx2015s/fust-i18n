@@ -43,6 +43,12 @@ pub type I18nDicts = std::collections::HashMap<String, I18nDict, ahash::RandomSt
 static I18N_DICTS: std::sync::LazyLock<std::sync::Arc<std::sync::RwLock<I18nDicts>>> =
     std::sync::LazyLock::new(|| std::sync::Arc::new(std::sync::RwLock::new(I18nDicts::default())));
 
+static MISSING_KEY_CACHE: std::sync::LazyLock<
+    std::sync::Arc<std::sync::RwLock<std::collections::HashSet<String, ahash::RandomState>>>,
+> = std::sync::LazyLock::new(|| {
+    std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashSet::default()))
+});
+
 /// 将 ini 格式的翻译文件解释为一个 HashMap
 pub fn parse_ini<R: std::io::Read>(mut reader: R) -> Result<I18nDict, ini::Error> {
     let file = ini::Ini::read_from(&mut reader)?;
@@ -81,6 +87,12 @@ pub fn update_i18n_dicts(locale: &str, dict: I18nDict) {
 pub fn update_i18n_ini<R: std::io::Read>(locale: &str, reader: R) -> Result<(), ini::Error> {
     update_i18n_dicts(locale, parse_ini(reader)?);
     Ok(())
+}
+
+/// 获取字典中未覆盖的键
+pub fn get_missing_keys() -> Vec<String> {
+    let cache = MISSING_KEY_CACHE.read().unwrap();
+    cache.iter().cloned().collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -150,6 +162,7 @@ static PARAM_REGEX: std::sync::LazyLock<regex::Regex> =
 impl std::fmt::Display for LocalisedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn write_unknown_key(f: &mut std::fmt::Formatter<'_>, key: &str) -> std::fmt::Result {
+            MISSING_KEY_CACHE.write().unwrap().insert(key.to_string());
             f.write_str("Unknown key: ")?;
             f.write_str(key)
         }
