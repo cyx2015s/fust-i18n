@@ -7,7 +7,7 @@ edition = "2024"
 ahash = "*"
 regex = "1"
 rust-ini = "*"
-egui = {"version" = "*", "optional" = true}
+egui = {"version" = "0.33", "optional" = true}
 
 [features]
 egui = ["dep:egui"]
