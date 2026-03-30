@@ -1,11 +1,36 @@
+//!
+//! 一个简化的基于异星工厂翻译文件格式的翻译器。
+//! # 使用
+//! ## 加载翻译
+//!
+//!例：
+//!
+//!```rust
+//!fust_i18n::update_i18n_ini(
+//!    "zh-CN",
+//!    std::io::Cursor::new(include_str!("../assets/base.cfg")),
+//!).unwrap();
+//!```
+//!
+//!## 使用翻译
+//!
+//!例：
+//!
+//!```rust
+//!println("{}", fust_i18n::t!("item-name.iron-plate"));
+//!```
+//!
+
 static LOCALE: std::sync::LazyLock<std::sync::Arc<std::sync::RwLock<String>>> =
     std::sync::LazyLock::new(|| std::sync::Arc::new(std::sync::RwLock::new(String::from("zh-CN"))));
 
+/// 设置当前的语言代码
 pub fn set_locale(locale: &str) {
     let mut loc = LOCALE.write().unwrap();
     *loc = locale.to_string();
 }
 
+/// 获取当前的语言代码
 pub fn get_locale() -> String {
     let loc = LOCALE.read().unwrap();
     loc.clone()
@@ -18,8 +43,9 @@ pub type I18nDicts = std::collections::HashMap<String, I18nDict, ahash::RandomSt
 static I18N_DICTS: std::sync::LazyLock<std::sync::Arc<std::sync::RwLock<I18nDicts>>> =
     std::sync::LazyLock::new(|| std::sync::Arc::new(std::sync::RwLock::new(I18nDicts::default())));
 
+/// 将 ini 格式的翻译文件解释为一个 HashMap
 pub fn parse_ini<R: std::io::Read>(mut reader: R) -> Result<I18nDict, ini::Error> {
-    let file = ini::Ini::read_from(&mut reader).unwrap();
+    let file = ini::Ini::read_from(&mut reader)?;
     let mut dict = I18nDict::default();
     for (sec, prop) in file.iter() {
         if let Some(sec) = sec {
@@ -35,11 +61,13 @@ pub fn parse_ini<R: std::io::Read>(mut reader: R) -> Result<I18nDict, ini::Error
     Ok(dict)
 }
 
+/// 重置翻译字典
 pub fn reset_i18n_dicts() {
     let mut dicts = I18N_DICTS.write().unwrap();
     *dicts = I18nDicts::default();
 }
 
+/// 从HashMap更新翻译字典
 pub fn update_i18n_dicts(locale: &str, dict: I18nDict) {
     let mut dicts = I18N_DICTS.write().unwrap();
     if let Some(old_dict) = dicts.get_mut(locale) {
@@ -47,6 +75,12 @@ pub fn update_i18n_dicts(locale: &str, dict: I18nDict) {
     } else {
         dicts.insert(locale.to_string(), dict);
     }
+}
+
+/// 从文件更新翻译字典
+pub fn update_i18n_ini<R: std::io::Read>(locale: &str, reader: R) -> Result<(), ini::Error> {
+    update_i18n_dicts(locale, parse_ini(reader)?);
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -93,16 +127,17 @@ impl From<Vec<LocalisedString>> for LocalisedString {
     }
 }
 
+/// 方便使用宏创建 LocalisedString
 #[macro_export]
 macro_rules! t {
     ($key:expr $(,)?) => {
-        LocalisedString::from(vec![$key])
+        $crate::LocalisedString::from(vec![$key])
     };
     ($key:expr, $($arg:expr),* $(,)?) => {
-        LocalisedString::from(vec![
-            LocalisedString::from($key),
+        $crate::LocalisedString::from(vec![
+            $crate::LocalisedString::from($key),
             $(
-                LocalisedString::from($arg),
+                $crate::LocalisedString::from($arg),
             )*
         ])
     }
@@ -115,51 +150,68 @@ static PARAM_REGEX: std::sync::LazyLock<regex::Regex> =
 impl std::fmt::Display for LocalisedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn write_unknown_key(f: &mut std::fmt::Formatter<'_>, key: &str) -> std::fmt::Result {
-            f.write_str("Unknown key: ").unwrap();
+            f.write_str("Unknown key: ")?;
             f.write_str(key)
         }
         match self {
-            LocalisedString::Literal(s) => f.write_str(s).unwrap(),
+            LocalisedString::Literal(s) => f.write_str(s)?,
             LocalisedString::Function(vec) => {
                 let dicts = I18N_DICTS.read().unwrap();
-                if let Some(dict) = dicts.get(&get_locale()) {
-                    if let Some(value) = dict.get(match &vec[0] {
+                if let Some(dict) = dicts.get(&get_locale())
+                    && let Some(value) = dict.get(match &vec[0] {
                         LocalisedString::Literal(s) => s,
                         _ => return write_unknown_key(f, "Invalid key format"),
-                    }) {
-                        // 将__1__、__2__等占位符替换为参数
-                        let mut offset = 0;
-                        for cap in PARAM_REGEX.captures_iter(value) {
-                            let whole_match = cap.get(0).unwrap();
-                            f.write_str(&value[offset..whole_match.start()])?;
-                            offset = whole_match.end();
-                            let index = cap[1].parse::<usize>().unwrap();
-                            if index < vec.len() {
-                                f.write_str(&vec[index].to_string())?;
+                    })
+                {
+                    // 将__1__、__2__等占位符替换为参数
+                    let mut offset = 0;
+                    for cap in PARAM_REGEX.captures_iter(value) {
+                        let whole_match = cap.get(0).unwrap();
+                        f.write_str(&value[offset..whole_match.start()])?;
+                        offset = whole_match.end();
+                        let index = cap[1].parse::<usize>().unwrap();
+                        if index < vec.len() {
+                            f.write_str(&vec[index].to_string())?;
+                        } else {
+                            f.write_str(whole_match.as_str())?;
+                        }
+                    }
+                    f.write_str(&value[offset..])?;
+                } else {
+                    match &vec[0] {
+                        LocalisedString::Literal(s) => {
+                            if s.is_empty() {
+                                // 连接所有参数
+                                for arg in &vec[1..] {
+                                    f.write_str(&arg.to_string())?;
+                                }
+                            } else if s == "?" {
+                                // 找到第一个有效的翻译
+                                for v in &vec[1..] {
+                                    match v {
+                                        LocalisedString::Literal(s) => {
+                                            f.write_str(s)?;
+                                            break;
+                                        }
+                                        LocalisedString::Function(vec) => {
+                                            if let LocalisedString::Literal(key) = &vec[0]
+                                                && let Some(dict) = dicts.get(&get_locale())
+                                                && dict.contains_key(key)
+                                            {
+                                                f.write_str(&v.to_string())?;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
                             } else {
-                                f.write_str(whole_match.as_str())?;
+                                write_unknown_key(f, s)?;
                             }
                         }
-                        f.write_str(&value[offset..])?;
-                    } else {
-                        write_unknown_key(
-                            f,
-                            match &vec[0] {
-                                LocalisedString::Literal(s) => s,
-                                _ => return write_unknown_key(f, "Invalid key format"),
-                            },
-                        )
-                        .unwrap();
+                        LocalisedString::Function(s) => {
+                            write_unknown_key(f, &format!("Invalid key format: {:?}", s))?;
+                        }
                     }
-                } else {
-                    write_unknown_key(
-                        f,
-                        match &vec[0] {
-                            LocalisedString::Literal(s) => s,
-                            _ => return write_unknown_key(f, "Invalid key format"),
-                        },
-                    )
-                    .unwrap();
                 }
             }
         }
@@ -199,14 +251,16 @@ fn test_macro() {
 
 #[test]
 fn test_translate() {
-    update_i18n_dicts(
+    update_i18n_ini(
         "zh-CN",
-        parse_ini(std::io::Cursor::new(include_str!("../assets/base.cfg"))).unwrap(),
-    );
-    update_i18n_dicts(
+        std::io::Cursor::new(include_str!("../assets/base.cfg")),
+    )
+    .unwrap();
+    update_i18n_ini(
         "zh-CN",
-        parse_ini(std::io::Cursor::new(include_str!("../assets/core.cfg"))).unwrap(),
-    );
+        std::io::Cursor::new(include_str!("../assets/core.cfg")),
+    )
+    .unwrap();
     update_i18n_dicts(
         "zh-CN",
         I18nDict::from_iter(
@@ -232,5 +286,12 @@ fn test_translate() {
     assert_eq!(
         s.to_string(),
         "ferris 将 1 份的 铁板 请求改为 2 份的 铜板".to_string()
+    );
+
+    eprintln!("{}", t!("", "concat", " and concat"));
+
+    eprintln!(
+        "{}",
+        t!("?", t!("error.fallback"), t!("item-name.iron-plate"))
     );
 }
