@@ -8,6 +8,7 @@ ahash = "*"
 regex = "1"
 rust-ini = "*"
 egui = {"version" = "0.33", "optional" = true}
+log = "0.4.29"
 
 [features]
 egui = ["dep:egui"]

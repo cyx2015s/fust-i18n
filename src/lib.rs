@@ -150,7 +150,6 @@ impl From<LocalisedString> for egui::WidgetText {
     fn from(value: LocalisedString) -> Self {
         egui::WidgetText::from(value.to_string())
     }
-    
 }
 
 /// 方便使用宏创建 LocalisedString
@@ -192,15 +191,39 @@ impl std::fmt::Display for LocalisedString {
                 {
                     // 将__1__、__2__等占位符替换为参数
                     let mut offset = 0;
+                    let mut params_used = vec![false; value.len()];
                     for cap in PARAM_REGEX.captures_iter(value) {
                         let whole_match = cap.get(0).unwrap();
                         f.write_str(&value[offset..whole_match.start()])?;
                         offset = whole_match.end();
                         let index = cap[1].parse::<usize>().unwrap();
                         if index < vec.len() {
+                            params_used[index] = true;
                             f.write_str(&vec[index].to_string())?;
                         } else {
                             f.write_str(whole_match.as_str())?;
+                        }
+                    }
+                    if !params_used.iter().all(|&used| used) {
+                        if let Some(key) = match &vec[0] {
+                            LocalisedString::Literal(s) => Some(s),
+                            _ => None,
+                        } {
+                            if MISSING_KEY_CACHE.read().unwrap().contains(key) {
+                                log::warn!(
+                                    "Warning: Not all parameters were used in the translation for key '{}'",
+                                    match &vec[0] {
+                                        LocalisedString::Literal(s) => s,
+                                        _ => "Invalid key format",
+                                    }
+                                );
+                            } else {
+                                log::warn!(
+                                    "Warning: Not all parameters were used in the translation for key '{}'. This warning will only be shown once per missing key.",
+                                    key
+                                );
+                                MISSING_KEY_CACHE.write().unwrap().insert(key.to_string());
+                            }
                         }
                     }
                     f.write_str(&value[offset..])?;
