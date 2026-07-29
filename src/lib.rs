@@ -217,10 +217,18 @@ impl std::fmt::Display for LocalisedString {
                                         _ => "Invalid key format",
                                     }
                                 );
+                                log::warn!(
+                                    "Used parameters: {:?}",
+                                    &params_used,
+                                )
                             } else {
                                 log::warn!(
                                     "Warning: Not all parameters were used in the translation for key '{}'. This warning will only be shown once per missing key.",
                                     key
+                                );
+                                log::warn!(
+                                    "Used parameters: {:?}",
+                                    &params_used,
                                 );
                                 MISSING_KEY_CACHE.write().unwrap().insert(key.to_string());
                             }
