@@ -204,7 +204,7 @@ impl std::fmt::Display for LocalisedString {
                             f.write_str(whole_match.as_str())?;
                         }
                     }
-                    if !params_used.iter().all(|&used| used) {
+                    if !params_used[1..].iter().all(|&used| used) {
                         if let Some(key) = match &vec[0] {
                             LocalisedString::Literal(s) => Some(s),
                             _ => None,
