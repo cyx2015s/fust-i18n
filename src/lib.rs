@@ -191,7 +191,7 @@ impl std::fmt::Display for LocalisedString {
                 {
                     // 将__1__、__2__等占位符替换为参数
                     let mut offset = 0;
-                    let mut params_used = vec![false; value.len()];
+                    let mut params_used = vec![false; vec.len()];
                     for cap in PARAM_REGEX.captures_iter(value) {
                         let whole_match = cap.get(0).unwrap();
                         f.write_str(&value[offset..whole_match.start()])?;
@@ -209,27 +209,12 @@ impl std::fmt::Display for LocalisedString {
                             LocalisedString::Literal(s) => Some(s),
                             _ => None,
                         } {
-                            if MISSING_KEY_CACHE.read().unwrap().contains(key) {
-                                log::warn!(
-                                    "Warning: Not all parameters were used in the translation for key '{}'",
-                                    match &vec[0] {
-                                        LocalisedString::Literal(s) => s,
-                                        _ => "Invalid key format",
-                                    }
-                                );
-                                log::warn!(
-                                    "Used parameters: {:?}",
-                                    &params_used,
-                                )
-                            } else {
+                            if !MISSING_KEY_CACHE.read().unwrap().contains(key) {
                                 log::warn!(
                                     "Warning: Not all parameters were used in the translation for key '{}'. This warning will only be shown once per missing key.",
                                     key
                                 );
-                                log::warn!(
-                                    "Used parameters: {:?}",
-                                    &params_used,
-                                );
+                                log::warn!("Used parameters: {:?}", &params_used,);
                                 MISSING_KEY_CACHE.write().unwrap().insert(key.to_string());
                             }
                         }
